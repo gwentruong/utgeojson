@@ -29,7 +29,7 @@ typedef struct polyline {
 } PolyLine;
 
 void       write_geojson(FILE *fp, Record *record_shp, Record *record_dbf,
-                         Header *header_dbf, Field **array);
+                         Header *header_dbf, Field **array, char *filename);
 // SHP related
 RecordSHP *parse_recordSHP(FILE *fp);
 RecordDBF *parse_recordDBF(FILE *fp, Header *header);
@@ -39,6 +39,7 @@ Point     *parse_points(unsigned char *buf, int num_points);
 
 int main(void)
 {
+    char *filename = "polyline";
     FILE *fshp = fopen("./sample/polyline.shp", "rb");
     FILE *fdbf = fopen("./sample/polyline.dbf", "rb");
     FILE *fjs  = fopen("polyline.geojson", "w");
@@ -78,7 +79,7 @@ int main(void)
     printf("Finished DBF\n");
 
     // Write GeoJSON
-    write_geojson(fjs, record_shp, record_dbf, header, array);
+    write_geojson(fjs, record_shp, record_dbf, header, array, filename);
 
     record_free(record_shp, shape_type);    // Free SHP
     record_free(record_dbf, 0);             // Free DBF
@@ -95,9 +96,8 @@ int main(void)
 
 // Write GeoJSON
 void write_geojson(FILE *fp, Record *record_shp, Record *record_dbf,
-                   Header *header_dbf, Field **array)
+                   Header *header_dbf, Field **array, char *filename)
 {
-   char *name = "polyline";
    int   num_fields = (header_dbf->header_size - 33) / 32;
    int   num_rec = header_dbf->record_num;
    // int num_rec = 3;
@@ -110,7 +110,8 @@ void write_geojson(FILE *fp, Record *record_shp, Record *record_dbf,
    RecordDBF *dbf;
 
    // Head
-   fprintf(fp, "{\n\"type\": \"FeatureCollection\",\n\"name\":\"%s\",\n\"feature\": [", name);
+   fprintf(fp, "{\n\"type\": \"FeatureCollection\",\n\"name\":\"%s\",\n\"feature\": [",
+           filename);
 
    // Print each record
    for (i = 0; i < num_rec; i++, record_shp = record_shp->next, record_dbf = record_dbf->next)
