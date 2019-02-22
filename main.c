@@ -154,14 +154,14 @@ void write_geojson(FILE *fp, Record *record_shp, Record *record_dbf,
        {
            case 1:
                point = shp->shape;
-               fprintf(fp, "[%.3f, %.3f]", point->x, point->y);
+               fprintf(fp, "[ %.3f, %.3f ]", point->x, point->y);
                break;
            case 3:
            case 5:
                polyline = shp->shape;
                for (j = 0; j < polyline->num_points; j++)
                {
-                   fprintf(fp, "[%.3f, %.3f]", polyline->points[j].x,
+                   fprintf(fp, "[ %.3f, %.3f ]", polyline->points[j].x,
                                                polyline->points[j].y);
                    if (j != polyline->num_points - 1)
                        fprintf(fp, ", ");
