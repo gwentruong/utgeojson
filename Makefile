@@ -1,2 +1,2 @@
 all:
-	gcc -Wall utgeojson.c -o utgeojson
+	gcc -Wall main.c utgeojson.c -o utgeojson
