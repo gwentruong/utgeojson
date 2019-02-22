@@ -3,8 +3,7 @@
 #include <string.h>
 #include "utgeojson.h"
 
-// SHP
-int parse_headerSHP(FILE *fp)
+int parse_headerSHP(FILE *fp)                   // Parse SHP header
 {
     unsigned char header[100];
     int           code;
@@ -21,48 +20,9 @@ int parse_headerSHP(FILE *fp)
     return vs[1];
 }
 
-int recordSHP_prepend(RecordSHP **p_head, RecordSHP *new_record)
+Header *parse_headerDBF(FILE *fp)               // Parse DBF header
 {
-    if (new_record == NULL)
-        return -1;
-
-    new_record->next = *p_head;
-    *p_head = new_record;
-
-    return 0;
-}
-
-void recordSHP_reverse(RecordSHP **p_head)
-{
-    RecordSHP *prev = NULL;
-    RecordSHP *current = *p_head;
-    RecordSHP *next;
-
-    while (current != NULL)
-    {
-        next = current->next;
-        current->next = prev;
-        prev = current;
-        current = next;
-    }
-
-    *p_head = prev;
-}
-
-int recordSHP_length(RecordSHP *head)
-{
-    int len = 0;
-
-    for (RecordSHP *p = head; p != NULL; p = p->next)
-        len++;
-
-    return len;
-}
-
-// DBF
-HeaderDBF *parse_headerDBF(FILE *fp)
-{
-    HeaderDBF    *head = malloc(sizeof(HeaderDBF));
+    Header    *head = malloc(sizeof(Header));
     unsigned char header[32];
     int           num;
     short         head_record[2];
@@ -78,9 +38,9 @@ HeaderDBF *parse_headerDBF(FILE *fp)
     return head;
 }
 
-FieldDBF *parse_field(FILE *fp)
+Field *parse_field(FILE *fp)
 {
-    FieldDBF     *fd = malloc(sizeof(FieldDBF));
+    Field     *fd = malloc(sizeof(Field));
     unsigned char field[32];
     unsigned char name[12];
 
@@ -100,27 +60,21 @@ FieldDBF *parse_field(FILE *fp)
     return fd;
 }
 
-RecordDBF *parse_recordDBF(FILE *fp, HeaderDBF *header)
+Record *new_record(void *data)
 {
-    int           size = header->record_size;
-    RecordDBF    *rec = malloc(sizeof(RecordDBF));
-    unsigned char record[size];
+    Record *p = malloc(sizeof(Record));
 
-    int nitems = fread(record, sizeof(record), 1, fp);
-    if (nitems != 1)     // EOF
+    if (data == NULL)
         return NULL;
 
-    rec->is_deleted = record[0];
-    rec->next       = NULL;
+    p->data = data;
+    p->next = NULL;
 
-    rec->content    = malloc(size - 1);
-    for (int i = 1, j = 0; i < size; i++, j++)
-        rec->content[j] = record[i];
-
-    return rec;
+    return p;
 }
 
-int recordDBF_prepend(RecordDBF **p_head, RecordDBF *new_record)
+// Common functions
+int record_prepend(Record **p_head, Record *new_record)
 {
     if (new_record == NULL)
         return -1;
@@ -131,11 +85,11 @@ int recordDBF_prepend(RecordDBF **p_head, RecordDBF *new_record)
     return 0;
 }
 
-void recordDBF_reverse(RecordDBF **p_head)
+void record_reverse(Record **p_head)
 {
-    RecordDBF *prev = NULL;
-    RecordDBF *current = *p_head;
-    RecordDBF *next;
+    Record *prev = NULL;
+    Record *current = *p_head;
+    Record *next;
 
     while (current != NULL)
     {
@@ -148,17 +102,16 @@ void recordDBF_reverse(RecordDBF **p_head)
     *p_head = prev;
 }
 
-void recordDBF_free(RecordDBF *head)
+int record_length(Record *head)
 {
-    for (RecordDBF *p = head; p != NULL; p = head)
-    {
-        head = head->next;
-        free(p->content);
-        free(p);
-    }
+    int len = 0;
+
+    for (Record *p = head; p != NULL; p = p->next)
+        len++;
+
+    return len;
 }
 
-// Common
 int *parse_parts(unsigned char *buf, int num_parts)
 {
     int *parts = malloc(sizeof(int) * num_parts);

@@ -3,6 +3,18 @@
 #include <string.h>
 #include "utgeojson.h"
 
+typedef struct record_shp {
+    int   num;
+    int   len;
+    int   shape_type;
+    void *shape;
+} RecordSHP;
+
+typedef struct record_dbf {
+    unsigned char  is_deleted;
+    unsigned char *content;
+} RecordDBF;
+
 typedef struct point {
     double x;
     double y;
@@ -16,11 +28,12 @@ typedef struct polyline {
     Point  *points;
 } PolyLine;
 
-void       write_geojson(FILE *fp, RecordSHP *shp, RecordDBF *dbf,
-                         HeaderDBF *head_dbf, FieldDBF **array);
+void       write_geojson(FILE *fp, Record *record_shp, Record *record_dbf,
+                         Header *header_dbf, Field **array);
 // SHP related
 RecordSHP *parse_recordSHP(FILE *fp);
-void       recordSHP_free(RecordSHP *head, int shape_type);
+RecordDBF *parse_recordDBF(FILE *fp, Header *header);
+void       record_free(Record *head, int shape_type);
 PolyLine  *parse_polyline(unsigned char *buf);
 Point     *parse_points(unsigned char *buf, int num_points);
 
@@ -36,45 +49,44 @@ int main(void)
     }
 
     // SHP
-    RecordSHP *record_shp = NULL;
-    int        shape_type = parse_headerSHP(fshp);
+    Record *record_shp = NULL;
+    int     shape_type = parse_headerSHP(fshp);
 
-    while (recordSHP_prepend(&record_shp, parse_recordSHP(fshp)) == 0)
+    while (record_prepend(&record_shp, new_record(parse_recordSHP(fshp))) == 0)
         ;
-    recordSHP_reverse(&record_shp);
+    record_reverse(&record_shp);
     printf("Finished SHP\n");
 
     // DBF
-    FieldDBF  *field;
-    RecordDBF *record_dbf = NULL;
-    int        i = 0;
+    Field  *field;
+    Record *record_dbf = NULL;
+    int     i = 0;
 
-    HeaderDBF *header = parse_headerDBF(fdbf);
-    int        num_fields = (header->header_size - 33) / 32;
-    FieldDBF **array = malloc(sizeof(FieldDBF *) * num_fields);
+    Header *header = parse_headerDBF(fdbf);
+    int     num_fields = (header->header_size - 33) / 32;
+    Field **array = malloc(sizeof(Field *) * num_fields);
     while ((field = parse_field(fdbf)) != NULL)
     {
         array[i] = field;
         i++;
     }
 
-    while(recordDBF_prepend(&record_dbf, parse_recordDBF(fdbf, header)) == 0)
+    while(record_prepend(&record_dbf,
+          new_record(parse_recordDBF(fdbf, header))) == 0)
         ;
-    recordDBF_reverse(&record_dbf);
+    record_reverse(&record_dbf);
     printf("Finished DBF\n");
 
     // Write GeoJSON
     write_geojson(fjs, record_shp, record_dbf, header, array);
 
-    // End SHP
-    recordSHP_free(record_shp, shape_type);
-    // End DBF
-    recordDBF_free(record_dbf);
+    record_free(record_shp, shape_type);    // Free SHP
+    record_free(record_dbf, 0);             // Free DBF
     for (i = 0; i < num_fields; i++)
         free(array[i]);
     free(array);
     free(header);
-    // End
+
     fclose(fshp);
     fclose(fdbf);
     fclose(fjs);
@@ -82,7 +94,8 @@ int main(void)
 }
 
 // Write GeoJSON
-void write_geojson(FILE *fp, RecordSHP *shp, RecordDBF *dbf, HeaderDBF *header_dbf, FieldDBF **array)
+void write_geojson(FILE *fp, Record *record_shp, Record *record_dbf,
+                   Header *header_dbf, Field **array)
 {
    char *name = "polyline";
    int   num_fields = (header_dbf->header_size - 33) / 32;
@@ -91,15 +104,19 @@ void write_geojson(FILE *fp, RecordSHP *shp, RecordDBF *dbf, HeaderDBF *header_d
    printf("num_fields %d, record_num %d\n", num_fields, header_dbf->record_num);
    int   i, j, k, ptr, field_len;
    char  type;
-   Point    *point;
-   PolyLine *polyline;
+   Point     *point;
+   PolyLine  *polyline;
+   RecordSHP *shp;
+   RecordDBF *dbf;
 
    // Head
    fprintf(fp, "{\n\"type\": \"FeatureCollection\",\n\"name\":\"%s\",\n\"feature\": [", name);
 
    // Print each record
-   for (i = 0; i < num_rec; i++, shp = shp->next, dbf = dbf->next)
+   for (i = 0; i < num_rec; i++, record_shp = record_shp->next, record_dbf = record_dbf->next)
    {
+       shp = record_shp->data;
+       dbf = record_dbf->data;
        field_len = 0;
        ptr       = 0;
        fprintf(fp, "\n{\"type\": \"Feature\", \"properties\": {");
@@ -179,7 +196,6 @@ RecordSHP *parse_recordSHP(FILE *fp)
    record->num        = num_len[0];
    record->len        = num_len[1] * 2;
    record->shape_type = shape_type;
-   record->next       = NULL;
 
    switch (shape_type)
    {
@@ -198,29 +214,57 @@ RecordSHP *parse_recordSHP(FILE *fp)
    return record;
 }
 
-void recordSHP_free(RecordSHP *head, int shape_type)
+RecordDBF *parse_recordDBF(FILE *fp, Header *header)
 {
-    PolyLine *polyline;
+    int           size = header->record_size;
+    RecordDBF    *rec = malloc(sizeof(RecordDBF));
+    unsigned char record[size];
 
-    for (RecordSHP *p = head; p != NULL; p = head)
+    int nitems = fread(record, sizeof(record), 1, fp);
+    if (nitems != 1)     // EOF
+        return NULL;
+
+    rec->is_deleted = record[0];
+    rec->content    = malloc(size - 1);
+    for (int i = 1, j = 0; i < size; i++, j++)
+        rec->content[j] = record[i];
+
+    return rec;
+}
+
+void record_free(Record *head, int shape_type)
+{
+    RecordSHP *shp;
+    RecordDBF *dbf;
+    PolyLine  *polyline;
+
+    for (Record *p = head; p != NULL; p = head)
     {
         head = head->next;
         switch (shape_type)
         {
             case 1:
             case 21:
-                free(p->shape);
-                free(p);
+                shp = p->data;
+                free(shp->shape);
+                free(shp);
                 break;
             case 3:
             case 5:
-                polyline = p->shape;
+                shp = p->data;
+                polyline = shp->shape;
                 free(polyline->points);
                 free(polyline->parts);
                 free(polyline);
-                free(p);
+                free(shp);
+                break;
+            default:
+                dbf = p->data;
+                free(dbf->content);
+                free(dbf);
                 break;
         }
+        free(p);
     }
 }
 
