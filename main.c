@@ -29,7 +29,7 @@ typedef struct polyline {
 } PolyLine;
 
 void       write_geojson(FILE *fp, Record *record_shp, Record *record_dbf,
-                         Header *header_dbf, Field **array);
+                         Header *header_dbf, Field **array, char *filename);
 // SHP related
 RecordSHP *parse_recordSHP(FILE *fp);
 RecordDBF *parse_recordDBF(FILE *fp, Header *header);
@@ -39,6 +39,7 @@ Point     *parse_points(unsigned char *buf, int num_points);
 
 int main(void)
 {
+    char *filename = "polyline";
     FILE *fshp = fopen("./sample/polyline.shp", "rb");
     FILE *fdbf = fopen("./sample/polyline.dbf", "rb");
     FILE *fjs  = fopen("polyline.geojson", "w");
@@ -78,7 +79,7 @@ int main(void)
     printf("Finished DBF\n");
 
     // Write GeoJSON
-    write_geojson(fjs, record_shp, record_dbf, header, array);
+    write_geojson(fjs, record_shp, record_dbf, header, array, filename);
 
     record_free(record_shp, shape_type);    // Free SHP
     record_free(record_dbf, 0);             // Free DBF
@@ -95,9 +96,8 @@ int main(void)
 
 // Write GeoJSON
 void write_geojson(FILE *fp, Record *record_shp, Record *record_dbf,
-                   Header *header_dbf, Field **array)
+                   Header *header_dbf, Field **array, char *filename)
 {
-   char *name = "polyline";
    int   num_fields = (header_dbf->header_size - 33) / 32;
    int   num_rec = header_dbf->record_num;
    // int num_rec = 3;
@@ -110,7 +110,8 @@ void write_geojson(FILE *fp, Record *record_shp, Record *record_dbf,
    RecordDBF *dbf;
 
    // Head
-   fprintf(fp, "{\n\"type\": \"FeatureCollection\",\n\"name\":\"%s\",\n\"feature\": [", name);
+   fprintf(fp, "{\n\"type\": \"FeatureCollection\",\n\"name\": \"%s\",\n\"features\": [",
+           filename);
 
    // Print each record
    for (i = 0; i < num_rec; i++, record_shp = record_shp->next, record_dbf = record_dbf->next)
@@ -119,13 +120,13 @@ void write_geojson(FILE *fp, Record *record_shp, Record *record_dbf,
        dbf = record_dbf->data;
        field_len = 0;
        ptr       = 0;
-       fprintf(fp, "\n{\"type\": \"Feature\", \"properties\": {");
+       fprintf(fp, "\n{ \"type\": \"Feature\", \"properties\": {");
 
        for (j = 0; j < num_fields; j++)            // Print dbf-record
        {
            type       = array[j]->type;
            field_len += array[j]->len;
-           fprintf(fp, "\"%s\": ", array[j]->name);
+           fprintf(fp, " \"%s\": ", array[j]->name);
 
            switch (type)
            {
@@ -137,7 +138,7 @@ void write_geojson(FILE *fp, Record *record_shp, Record *record_dbf,
                        ptr++;
                    }
                    if (k != (header_dbf->record_size - 1))
-                       fprintf(fp, ", ");
+                       fprintf(fp, ",");
                    else
                        fprintf(fp, "}, ");
                    break;
@@ -147,31 +148,31 @@ void write_geojson(FILE *fp, Record *record_shp, Record *record_dbf,
            }
        }
 
-       fprintf(fp, "\"geometry\": {\"type\": \"%s\", \"coordinates\": [ [ ",
+       fprintf(fp, "\"geometry\": { \"type\": \"%s\", \"coordinates\": [ [ ",
                shape_type(shp->shape_type));
        switch (shp->shape_type)
        {
            case 1:
                point = shp->shape;
-               fprintf(fp, "[%.3f, %.3f]", point->x, point->y);
+               fprintf(fp, "[ %.3f, %.3f ]", point->x, point->y);
                break;
            case 3:
            case 5:
                polyline = shp->shape;
                for (j = 0; j < polyline->num_points; j++)
                {
-                   fprintf(fp, "[%.3f, %.3f]", polyline->points[j].x,
+                   fprintf(fp, "[ %.3f, %.3f ]", polyline->points[j].x,
                                                polyline->points[j].y);
                    if (j != polyline->num_points - 1)
                        fprintf(fp, ", ");
                }
                break;
        }
-       fprintf(fp, " ] ] }");
+       fprintf(fp, " ] ] } }");
        if (i != num_rec - 1)
            fprintf(fp, ", ");
        else
-           fprintf(fp, "\n}");
+           fprintf(fp, "\n]\n}");
    }
 }
 
