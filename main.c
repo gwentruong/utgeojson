@@ -110,7 +110,7 @@ void write_geojson(FILE *fp, Record *record_shp, Record *record_dbf,
    RecordDBF *dbf;
 
    // Head
-   fprintf(fp, "{\n\"type\": \"FeatureCollection\",\n\"name\":\"%s\",\n\"feature\": [",
+   fprintf(fp, "{\n\"type\": \"FeatureCollection\",\n\"name\": \"%s\",\n\"features\": [",
            filename);
 
    // Print each record
@@ -120,13 +120,13 @@ void write_geojson(FILE *fp, Record *record_shp, Record *record_dbf,
        dbf = record_dbf->data;
        field_len = 0;
        ptr       = 0;
-       fprintf(fp, "\n{\"type\": \"Feature\", \"properties\": {");
+       fprintf(fp, "\n{ \"type\": \"Feature\", \"properties\": {");
 
        for (j = 0; j < num_fields; j++)            // Print dbf-record
        {
            type       = array[j]->type;
            field_len += array[j]->len;
-           fprintf(fp, "\"%s\": ", array[j]->name);
+           fprintf(fp, " \"%s\": ", array[j]->name);
 
            switch (type)
            {
@@ -138,7 +138,7 @@ void write_geojson(FILE *fp, Record *record_shp, Record *record_dbf,
                        ptr++;
                    }
                    if (k != (header_dbf->record_size - 1))
-                       fprintf(fp, ", ");
+                       fprintf(fp, ",");
                    else
                        fprintf(fp, "}, ");
                    break;
@@ -148,7 +148,7 @@ void write_geojson(FILE *fp, Record *record_shp, Record *record_dbf,
            }
        }
 
-       fprintf(fp, "\"geometry\": {\"type\": \"%s\", \"coordinates\": [ [ ",
+       fprintf(fp, "\"geometry\": { \"type\": \"%s\", \"coordinates\": [ [ ",
                shape_type(shp->shape_type));
        switch (shp->shape_type)
        {
@@ -168,11 +168,11 @@ void write_geojson(FILE *fp, Record *record_shp, Record *record_dbf,
                }
                break;
        }
-       fprintf(fp, " ] ] }");
+       fprintf(fp, " ] ] } }");
        if (i != num_rec - 1)
            fprintf(fp, ", ");
        else
-           fprintf(fp, "\n}");
+           fprintf(fp, "\n]\n}");
    }
 }
 
